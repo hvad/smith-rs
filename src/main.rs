@@ -16,7 +16,7 @@ use std::fs::File;
 
 fn main() {
     let args: Vec<String> = env::args().collect();
-    let mut config_path = "duck.ini".to_string();
+    let mut config_path = "smith-rs.ini".to_string();
     let mut is_daemon = false;
 
     for i in 0..args.len() {

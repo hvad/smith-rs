@@ -76,7 +76,7 @@ impl SmithEngine {
 
         if alert_enabled && (status == "CRITICAL" || status == "WARNING") {
             let subject = format!(
-                "duck Alert [{}] - {} on {}",
+                "Smith Alert [{}] - {} on {}",
                 status, category, self.config.hostname
             );
             let email_alert_clone = Arc::clone(&self.email_alert);
