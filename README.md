@@ -12,16 +12,16 @@ thread contention or resource degradation on production instances.
 
 ## Features
 
-* **Multi-Metric Architecture:** Monitors critical host operating characteristics concurrently without global lock friction:
-* **Load Average:** Triggers warnings or critical status reports by inspecting peak sustained pressure configurations across 1, 5, and 15-minute scopes.
-* **Memory Usage:** Bypasses external subprocesses to interact directly with internal RAM tables safely via asynchronous resource queries.
-* **Disk Space Mapping:** Dynamically resolves storage utilization thresholds mapped to designated OS kernel file systems or raw mount arrays.
-* **NTP Drift Synchronization:** Regularly calculates clock drift delta values against public standard synchronization server pools.
-
-
-* **Native Background Isolation (Daemon mode):** Decouples immediately into a standard Unix background process tracking a designated PID lock file.
-* **Configurable SMTP Email Alert Pipeline:** Seamlessly builds secure TLS mail requests targeting designated administrative distribution channels whenever statuses cross warning or critical limits.
-* **Dynamic Interval Adjustments:** Individual metric routines adapt to personalized collection loops independent of one another.
+*   **Nagios Core-Style State Machine**: Prevents flapping and false positives by tracking consecutive failures across **SOFT** and **HARD** states.
+*   **YAML-Based Object Configuration**: Modern, human-readable object definitions replacing restrictive INI layouts while preventing key duplication issues.
+*   **Timeperiods Management**: Restricts check executions and alert dispatches based on customizable weekly schedules (e.g., `24x7`, `work_hours`).
+*   **Multi-Contact Routing**: Dispatches alerts to multiple distinct email recipients asynchronously, filtered dynamically by their working hours and notification preferences (`w,u,c,r`).
+*   **Built-In Performance Plugins**:
+    *   **Load**: 1, 5, and 15-minute system load averages.
+    *   **Memory**: RAM utilization percentages.
+    *   **Disk**: Multi-mount point storage space validation.
+    *   **NTP**: Clock drift measurements against an external NTP pool server.
+*   **Daemonization**: Built-in support to safely detach, fork, and run as a low-overhead system background daemon[cite: 1].
 
 ---
 
@@ -36,96 +36,137 @@ cd smith-rs
 
 ```
 
-
 2. **Build the binary in release mode:**
 ```bash
 cargo build --release
 
 ```
 
-
 The high-efficiency compiled executable will be located under `./target/release/smith-rs`.
 
 ---
 
-## Configuration (`smith-rs.ini`)
 
-`smith-rs` is configured using a standard INI layout. Below is an example configuration file demonstrating available parameters:
+## Configuration (config.yaml)
+The agent uses a single structured config.yaml file to define settings, time schedules, contacts, and monitoring thresholds:
 
-```ini
-; General runtime parameters
-[Setting]
-log_file_path = smith-rs.log
-pid_file_path = smith-rs.pid
+```yaml
+setting:
+  log_file_path: "smith-rs.log"
+  pid_file_path: "smith-rs.pid"
+  debug: false
 
-; Enable or disable individual monitoring tasks
-loadaverage = true
-loadaverage_period = 10
+system:
+  hostname: "localhost"
 
-memoryusage = true
-memoryusage_period = 15
+email:
+  smtp_server: "smtp.example.com"
+  smtp_port: 465
+  sender_email: "alerts@example.com"
+  smtp_username: "user"
+  smtp_password: "pass"
 
-diskusage = true
-diskusage_period = 60
+timeperiods:
+  - name: "24x7"
+    alias: "24 Hours A Day, 7 Days A Week"
+    sunday: "00:00-24:00"
+    monday: "00:00-24:00"
+    tuesday: "00:00-24:00"
+    wednesday: "00:00-24:00"
+    thursday: "00:00-24:00"
+    friday: "00:00-24:00"
+    saturday: "00:00-24:00"
 
-ntpdrift = true
-ntpdrift_period = 120
+  - name: "work_hours"
+    alias: "Work Hours"
+    monday: "09:00-17:00"
+    tuesday: "09:00-17:00"
+    wednesday: "09:00-17:00"
+    thursday: "09:00-17:00"
+    friday: "09:00-17:00"
 
-; Set resource warning and critical thresholds
-[System]
-hostname = localhost
-load_average_warning_threshold = 16.0
-load_average_critical_threshold = 24.0
-disks = /, /System/Volumes/Data
-disk_warning_threshold = 90
-disk_critical_threshold = 95
-memory_warning_threshold = 85.0
-memory_critical_threshold = 95.0
+contacts:
+  - name: "john_smith"
+    alias: "John Smith"
+    email: "john.smiths@matrix.gov"
+    notification_period: "work_hours"
+    notification_options: ["w", "u", "c", "r"] # warning, unknown, critical, recovery
 
-; Network Time Protocol settings
-[Ntp]
-ntp_pool_server = pool.ntp.org
-ntp_warning_threshold = 1.0
-ntp_critical_threshold = 3.0
+services:
+  - name: "load"
+    description: "Load Average"
+    active: true
+    check_interval: 10
+    check_attempts: 3
+    check_time_period: "24x7"
+    warning: 16.0
+    critical: 24.0
 
-; Notification email configuration
-[Email]
-smtp_server = smtp.example.com
-smtp_port = 465
-sender_email = sender@example.com
-receiver_email = receiver@example.com
-smtp_username = user
-smtp_password = pass
+  - name: "memory"
+    description: "Memory Usage"
+    active: true
+    check_interval: 15
+    check_attempts: 3
+    check_time_period: "24x7"
+    warning: 85.0
+    critical: 95.0
 
-; Toggle email routing for specific check groups
-[Alerts]
-load = false
-memoryusage = false
-diskusage = false
-ntpdrift = false
+  - name: "disk"
+    description: "Disk Space"
+    active: true
+    check_interval: 60
+    check_attempts: 2
+    check_time_period: "24x7"
+    warning: 90.0
+    critical: 95.0
+    disks: ["/", "/var"]
+
+  - name: "ntp"
+    description: "NTP Drift"
+    active: true
+    check_interval: 120
+    check_attempts: 3
+    check_time_period: "24x7"
+    warning: 1.0
+    critical: 3.0
+    ntp_pool_server: "pool.ntp.org"
 
 ```
+
+---
+
+## State Machine & Notification Logic
+
+Soft vs. Hard States
+When a service check fails for the first time, it enters a SOFT alert state. No email notification is sent yet.
+
+The agent schedules a re-check based on the service interval.
+
+If the service check fails consistently up to check_attempts consecutive times, the state officially transitions into a HARD state.
+
+An email alert is immediately triggered and dispatched to all contacts whose operational timeperiod and flags match.
+
+If an unhealthy service returns to nominal parameters, it immediately transitions to a HARD OK state and fires a recovery (r) notification.
 
 ---
 
 ## Usage
 
 You can launch the binary immediately from the console. 
-By default, `smith-rs` searches for a config file named `smith-rs.ini` in the working context if flags are omitted.
 
 ```bash
-# Run using default settings
-./smith-rs
-
 # Run with a custom configuration path
-./smith-rs -c /etc/smith-rs/production.ini
-./smith-rs --config /etc/smith-rs/production.ini
+./smith-rs -c /etc/smith-rs/production.yaml
+./smith-rs --config /etc/smith-rs/production.yaml
 
 # Run detached as a persistent Linux daemon background process
-./smith-rs -d --config /etc/smith-rs/production.ini
-./smith-rs --daemonize --config /etc/smith-rs/production.ini
+./smith-rs -d --config /etc/smith-rs/production.yaml
+./smith-rs --daemonize --config /etc/smith-rs/production.yaml
 
 ```
+
+When daemonized, standard output and errors are redirected to the configured **log_file_path**, 
+and the running process ID is written to **pid_file_path**.
 
 ---
 
@@ -134,7 +175,7 @@ By default, `smith-rs` searches for a config file named `smith-rs.ini` in the wo
 ```text
 smith-rs/
 ├── Cargo.toml          # Rust package dependencies and metadata
-├── smith-rs.ini        # Default configuration reference template
+├── smith-rs.yaml        # Default configuration reference template
 ├── src/
 │   ├── main.rs         # Daemon manager and CLI loop initialization
 │   ├── config.rs       # INI parser mappings
@@ -153,4 +194,6 @@ smith-rs/
 
 ## License
 
-This project is open-source software distributed under the terms of the **Apache License, Version 2.0**. See the `LICENSE` file for full terms and conditions.
+This project is open-source software distributed under the terms of the 
+**Apache License, Version 2.0**. See the `LICENSE` file for full terms and conditions.
+
