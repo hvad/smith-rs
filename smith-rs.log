@@ -1,0 +1,10 @@
+2026-06-26 22:10:30 - SERVICE ALERT: localhost;Load Average;OK;HARD/1;1min: 3.52, 5min: 3.05, 15min: 2.80
+2026-06-26 22:10:30 - SERVICE ALERT: localhost;Memory Usage;OK;HARD/1;RAM Usage: 62.21%
+2026-06-26 22:10:30 - SERVICE ALERT: localhost;Disk Space (/);OK;HARD/1;Used: 85.63%
+2026-06-26 22:10:30 - SERVICE ALERT: localhost;Disk Space (/System/Volumes/Data);OK;HARD/1;Used: 85.63%
+2026-06-26 22:10:30 - SERVICE ALERT: localhost;NTP Drift;OK;HARD/1;Offset: 0.0174s
+2026-06-26 22:10:40 - SERVICE ALERT: localhost;Load Average;OK;HARD/1;1min: 3.82, 5min: 3.13, 15min: 2.83
+2026-06-26 22:10:45 - SERVICE ALERT: localhost;Memory Usage;OK;HARD/1;RAM Usage: 66.39%
+2026-06-26 22:10:50 - SERVICE ALERT: localhost;Load Average;OK;HARD/1;1min: 3.61, 5min: 3.11, 15min: 2.83
+2026-06-26 22:11:00 - SERVICE ALERT: localhost;Load Average;OK;HARD/1;1min: 3.87, 5min: 3.19, 15min: 2.86
+2026-06-26 22:11:00 - SERVICE ALERT: localhost;Memory Usage;OK;HARD/1;RAM Usage: 66.29%

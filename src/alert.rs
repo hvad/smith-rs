@@ -4,91 +4,90 @@ use lettre::{AsyncSmtpTransport, AsyncTransport, Message, Tokio1Executor};
 use std::sync::Arc;
 
 pub struct SMTPAlert {
-    smtp_server: String,
-    smtp_port: u16,
-    sender_email: String,
-    receiver_email: String,
-    smtp_username: Option<String>,
-    smtp_password: Option<String>,
+    config: AppConfig,
 }
 
 impl SMTPAlert {
     pub fn new(config: &AppConfig) -> Self {
-        let server = config
-            .ini
-            .get_from(Some("Email"), "smtp_server")
-            .unwrap_or("")
-            .to_string();
-        let port = config
-            .ini
-            .get_from(Some("Email"), "smtp_port")
-            .unwrap_or("25")
-            .parse::<u16>()
-            .unwrap_or(25);
-        let sender = config
-            .ini
-            .get_from(Some("Email"), "sender_email")
-            .unwrap_or("")
-            .to_string();
-        let receiver = config
-            .ini
-            .get_from(Some("Email"), "receiver_email")
-            .unwrap_or("")
-            .to_string();
-        let username = config
-            .ini
-            .get_from(Some("Email"), "smtp_username")
-            .map(|s| s.to_string());
-        let password = config
-            .ini
-            .get_from(Some("Email"), "smtp_password")
-            .map(|s| s.to_string());
-
         SMTPAlert {
-            smtp_server: server,
-            smtp_port: port,
-            sender_email: sender,
-            receiver_email: receiver,
-            smtp_username: username,
-            smtp_password: password,
+            config: config.clone(),
         }
     }
 
-    pub async fn send_alert(self: Arc<Self>, subject: String, body: String) {
-        if self.smtp_server.is_empty() {
+    pub async fn send_nagios_hard_alert(
+        self: Arc<Self>,
+        check_key: &str,
+        category: &str,
+        status: &str,
+        message: &str,
+    ) {
+        if self.config.email.smtp_server.is_empty() {
             return;
         }
 
-        let email = match Message::builder()
-            .from(self.sender_email.parse().unwrap())
-            .to(self.receiver_email.parse().unwrap())
-            .subject(subject)
-            .body(body)
-        {
-            Ok(msg) => msg,
-            Err(e) => {
-                eprintln!("Failed to build email message: {}", e);
-                return;
-            }
-        };
+        // Récupération de la description du service si disponible
+        let service_desc = self
+            .config
+            .services
+            .get(check_key)
+            .map(|s| s.description.as_str())
+            .unwrap_or(category);
 
-        let mut mailer = match AsyncSmtpTransport::<Tokio1Executor>::relay(&self.smtp_server) {
-            Ok(m) => m.port(self.smtp_port),
-            Err(e) => {
-                eprintln!("Failed to create SMTP transport: {}", e);
-                return;
-            }
-        };
+        for contact in self.config.contacts.values() {
+            if contact.wants_notification(status, &self.config.timeperiods) {
+                let subject = format!(
+                    "** Nagios HARD Alert [{}] - {} on {} **",
+                    status, service_desc, self.config.system.hostname
+                );
 
-        if let (Some(user), Some(pass)) = (&self.smtp_username, &self.smtp_password) {
-            if !user.is_empty() && !pass.is_empty() {
-                mailer = mailer.credentials(Credentials::new(user.clone(), pass.clone()));
-            }
-        }
+                let body = format!(
+                    "***** Smith-RS Nagios-Style Alert *****\n\n\
+                     Notification Type: HARD STATE\n\
+                     Service: {}\n\
+                     Host: {}\n\
+                     State: {}\n\
+                     Recipient Alias: {}\n\
+                     Recipient Email: {}\n\n\
+                     Additional Info:\n{}",
+                    service_desc,
+                    self.config.system.hostname,
+                    status,
+                    contact.alias,
+                    contact.email,
+                    message
+                );
 
-        let mailer = mailer.build();
-        if let Err(e) = mailer.send(email).await {
-            eprintln!("Failed to send SMTP alert: {}", e);
+                let email = match Message::builder()
+                    .from(self.config.email.sender_email.parse().unwrap())
+                    .to(contact.email.parse().unwrap())
+                    .subject(subject)
+                    .body(body)
+                {
+                    Ok(msg) => msg,
+                    Err(_) => continue,
+                };
+
+                let mut mailer = match AsyncSmtpTransport::<Tokio1Executor>::relay(
+                    &self.config.email.smtp_server,
+                ) {
+                    Ok(m) => m.port(self.config.email.smtp_port),
+                    Err(_) => return,
+                };
+
+                if let (Some(user), Some(pass)) = (
+                    &self.config.email.smtp_username,
+                    &self.config.email.smtp_password,
+                ) {
+                    if !user.is_empty() && !pass.is_empty() {
+                        mailer = mailer.credentials(Credentials::new(user.clone(), pass.clone()));
+                    }
+                }
+
+                let mailer = mailer.build();
+                tokio::spawn(async move {
+                    let _ = mailer.send(email).await;
+                });
+            }
         }
     }
 }

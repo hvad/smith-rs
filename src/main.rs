@@ -16,7 +16,7 @@ use std::fs::File;
 
 fn main() {
     let args: Vec<String> = env::args().collect();
-    let mut config_path = "smith-rs.ini".to_string();
+    let mut config_path = "config.yaml".to_string();
     let mut is_daemon = false;
 
     for i in 0..args.len() {
@@ -31,11 +31,11 @@ fn main() {
     let config = AppConfig::load(&config_path);
 
     if is_daemon {
-        let stdout = File::create(&config.log_file_path).unwrap();
-        let stderr = File::create(&config.log_file_path).unwrap();
+        let stdout = File::create(&config.setting.log_file_path).unwrap();
+        let stderr = File::create(&config.setting.log_file_path).unwrap();
 
         let daemonize = Daemonize::new()
-            .pid_file(&config.pid_file_path)
+            .pid_file(&config.setting.pid_file_path)
             .working_directory(".")
             .stdout(stdout)
             .stderr(stderr);

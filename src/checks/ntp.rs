@@ -7,36 +7,24 @@ pub struct NTPDriftCheck;
 #[async_trait::async_trait]
 impl BaseCheck for NTPDriftCheck {
     fn name(&self) -> &'static str {
-        "NTP"
+        "NTP Drift"
     }
     fn config_key(&self) -> &'static str {
-        "ntpdrift"
+        "ntp"
     }
     fn default_period(&self) -> u64 {
-        60
+        120
     }
 
     async fn run(&self, config: &AppConfig) -> Option<CheckResult> {
-        let server = config
-            .ini
-            .get_from(Some("Ntp"), "ntp_pool_server")
-            .unwrap_or("");
+        let sc = config.services.get(self.config_key())?;
+        let server = sc.ntp_pool_server.as_ref()?;
         if server.is_empty() {
             return None;
         }
 
-        let warn = config
-            .ini
-            .get_from(Some("Ntp"), "ntp_warning_threshold")
-            .unwrap_or("1.0")
-            .parse::<f64>()
-            .unwrap_or(1.0);
-        let crit = config
-            .ini
-            .get_from(Some("Ntp"), "ntp_critical_threshold")
-            .unwrap_or("3.0")
-            .parse::<f64>()
-            .unwrap_or(3.0);
+        let warn = sc.warning;
+        let crit = sc.critical;
 
         let client = AsyncSntpClient::new();
         match client.synchronize(server).await {
@@ -50,7 +38,7 @@ impl BaseCheck for NTPDriftCheck {
                 }
                 Some(CheckResult::Single {
                     status,
-                    message: format!("NTP Drift Offset: {:.4}s", offset),
+                    message: format!("Offset: {:.4}s", offset),
                 })
             }
             Err(e) => Some(CheckResult::Single {

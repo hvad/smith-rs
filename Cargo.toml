@@ -1,6 +1,6 @@
 [package]
 name = "smith-rs"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2024"
 authors = ["David Hannequin <david.hannequin@gmail.com>"]
 
@@ -8,8 +8,9 @@ authors = ["David Hannequin <david.hannequin@gmail.com>"]
 tokio = { version = "1.35", features = ["full"] }
 sysinfo = "0.30"
 chrono = "0.4"
-rust-ini = "0.20"
+serde = { version = "1.0", features = ["derive"] }
+serde_yaml = "0.9"
 lettre = { version = "0.11", default-features = false, features = ["tokio1-rustls-tls", "smtp-transport", "builder", "tokio1"] }
 rsntp = "4.0"
 async-trait = "0.1"
-daemonize = "0.5" 
+daemonize = "0.5"

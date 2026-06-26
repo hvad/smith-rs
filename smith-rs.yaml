@@ -1,0 +1,79 @@
+setting:
+  log_file_path: "smith-rs.log"
+  pid_file_path: "smith-rs.pid"
+  debug: false
+
+system:
+  hostname: "localhost"
+
+email:
+  smtp_server: "smtp.example.com"
+  smtp_port: 465
+  sender_email: "alerts@example.com"
+  smtp_username: "user"
+  smtp_password: "pass"
+
+timeperiods:
+  - name: "24x7"
+    alias: "24 Hours A Day, 7 Days A Week"
+    sunday: "00:00-24:00"
+    monday: "00:00-24:00"
+    tuesday: "00:00-24:00"
+    wednesday: "00:00-24:00"
+    thursday: "00:00-24:00"
+    friday: "00:00-24:00"
+    saturday: "00:00-24:00"
+
+  - name: "work_hours"
+    alias: "Work Hours"
+    monday: "09:00-17:00"
+    tuesday: "09:00-17:00"
+    wednesday: "09:00-17:00"
+    thursday: "09:00-17:00"
+    friday: "09:00-17:00"
+
+contacts:
+  - name: "john_smith"
+    alias: "John Smith"
+    email: "john.smiths@matrix.gov"
+    notification_period: "work_hours"
+    notification_options: ["w", "u", "c", "r"]
+
+services:
+  - name: "load"
+    description: "Load Average"
+    active: true
+    check_interval: 10
+    check_attempts: 3
+    check_time_period: "24x7"
+    warning: 16.0
+    critical: 24.0
+
+  - name: "memory"
+    description: "Memory Usage"
+    active: true
+    check_interval: 15
+    check_attempts: 3
+    check_time_period: "24x7"
+    warning: 85.0
+    critical: 95.0
+
+  - name: "disk"
+    description: "Disk Space"
+    active: true
+    check_interval: 60
+    check_attempts: 2
+    check_time_period: "24x7"
+    warning: 90.0
+    critical: 95.0
+    disks: ["/", "/System/Volumes/Data"]
+
+  - name: "ntp"
+    description: "NTP Drift"
+    active: true
+    check_interval: 120
+    check_attempts: 3
+    check_time_period: "24x7"
+    warning: 1.0
+    critical: 3.0
+    ntp_pool_server: "pool.ntp.org"

@@ -3,7 +3,6 @@ use crate::config::AppConfig;
 use sysinfo::System;
 
 pub struct MemoryUsageCheck {
-    // Thread-safe local initialization fallback or local instance state
     sys: tokio::sync::Mutex<System>,
 }
 
@@ -21,28 +20,20 @@ impl BaseCheck for MemoryUsageCheck {
         "Memory Usage"
     }
     fn config_key(&self) -> &'static str {
-        "memoryusage"
+        "memory"
     }
     fn default_period(&self) -> u64 {
-        30
+        15
     }
 
     async fn run(&self, config: &AppConfig) -> Option<CheckResult> {
-        let warn = config
-            .ini
-            .get_from(Some("System"), "memory_warning_threshold")
-            .unwrap_or("85.0")
-            .parse::<f64>()
-            .unwrap_or(85.0);
-        let crit = config
-            .ini
-            .get_from(Some("System"), "memory_critical_threshold")
-            .unwrap_or("95.0")
-            .parse::<f64>()
-            .unwrap_or(95.0);
+        let (warn, crit) = if let Some(sc) = config.services.get(self.config_key()) {
+            (sc.warning, sc.critical)
+        } else {
+            (85.0, 95.0)
+        };
 
         let mut sys = self.sys.lock().await;
-        // HIGH PERFORMANCE: Refresh ONLY memory metrics, bypassing CPU/PID tables entirely
         sys.refresh_memory();
 
         let total = sys.total_memory() as f64;

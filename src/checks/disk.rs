@@ -9,37 +9,32 @@ pub struct DiskUsageCheck;
 #[async_trait::async_trait]
 impl BaseCheck for DiskUsageCheck {
     fn name(&self) -> &'static str {
-        "Disk Usage"
+        "Disk Space"
     }
     fn config_key(&self) -> &'static str {
-        "diskusage"
+        "disk"
     }
     fn default_period(&self) -> u64 {
         60
     }
 
-    async fn run(&self, _config: &AppConfig) -> Option<CheckResult> {
-        // Only queries mount points directly from the OS kernel VFS
+    async fn run(&self, config: &AppConfig) -> Option<CheckResult> {
         let disks = Disks::new_with_refreshed_list();
-        let disks_input = _config.ini.get_from(Some("System"), "disks").unwrap_or("/");
 
-        let warn = _config
-            .ini
-            .get_from(Some("System"), "disk_warning_threshold")
-            .unwrap_or("90")
-            .parse::<f64>()
-            .unwrap_or(90.0);
-        let crit = _config
-            .ini
-            .get_from(Some("System"), "disk_critical_threshold")
-            .unwrap_or("95")
-            .parse::<f64>()
-            .unwrap_or(95.0);
+        let default_disks = vec!["/".to_string()];
+        let (warn, crit, target_disks) = if let Some(sc) = config.services.get(self.config_key()) {
+            (
+                sc.warning,
+                sc.critical,
+                sc.disks.as_ref().unwrap_or(&default_disks),
+            )
+        } else {
+            (90.0, 95.0, &default_disks)
+        };
 
         let mut results = HashMap::new();
 
-        // High efficiency substring lookup matching path bytes directly
-        for path_str in disks_input.split(',').map(|s| s.trim()) {
+        for path_str in target_disks {
             let target_path = Path::new(path_str);
             let mut found = false;
 
@@ -59,7 +54,7 @@ impl BaseCheck for DiskUsageCheck {
                         }
 
                         results.insert(
-                            path_str.to_string(),
+                            path_str.clone(),
                             (status, format!("Used: {:.2}%", used_percent)),
                         );
                     }
@@ -68,12 +63,11 @@ impl BaseCheck for DiskUsageCheck {
             }
             if !found {
                 results.insert(
-                    path_str.to_string(),
+                    path_str.clone(),
                     ("ERROR".to_string(), format!("Could not check {}", path_str)),
                 );
             }
         }
-
         Some(CheckResult::Multi(results))
     }
 }
