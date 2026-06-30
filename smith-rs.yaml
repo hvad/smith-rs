@@ -46,8 +46,8 @@ services:
     check_interval: 10
     check_attempts: 3
     check_time_period: "24x7"
-    warning: 16.0
-    critical: 24.0
+    warning: 16
+    critical: 24
 
   - name: "memory"
     description: "Memory Usage"
@@ -55,8 +55,8 @@ services:
     check_interval: 15
     check_attempts: 3
     check_time_period: "24x7"
-    warning: 85.0
-    critical: 95.0
+    warning: 85
+    critical: 95
 
   - name: "disk"
     description: "Disk Space"
@@ -64,8 +64,8 @@ services:
     check_interval: 60
     check_attempts: 2
     check_time_period: "24x7"
-    warning: 90.0
-    critical: 95.0
+    warning: 90
+    critical: 95
     disks: ["/", "/System/Volumes/Data"]
 
   - name: "ntp"
@@ -74,6 +74,6 @@ services:
     check_interval: 120
     check_attempts: 3
     check_time_period: "24x7"
-    warning: 1.0
-    critical: 3.0
+    warning: 1
+    critical: 3
     ntp_pool_server: "pool.ntp.org"

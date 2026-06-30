@@ -94,7 +94,7 @@ impl SmithEngine {
 
         let timestamp = Local::now().format("%Y-%m-%d %H:%M:%S").to_string();
         let log_entry = format!(
-            "{} - SERVICE ALERT: {};{};{};{}/{};{}\n",
+            "{} - SERVICE : {};{};{};{}/{};{}\n",
             timestamp,
             self.config.system.hostname,
             category,
