@@ -1,4 +1,5 @@
 pub mod disk;
+pub mod iowait;
 pub mod load;
 pub mod memory;
 pub mod ntp;

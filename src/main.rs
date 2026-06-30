@@ -4,6 +4,7 @@ mod config;
 mod engine;
 
 use crate::checks::disk::DiskUsageCheck;
+use crate::checks::iowait::IoWaitCheck;
 use crate::checks::load::LoadAverageCheck;
 use crate::checks::memory::MemoryUsageCheck;
 use crate::checks::ntp::NTPDriftCheck;
@@ -57,6 +58,7 @@ fn main() {
         agent.add_check(MemoryUsageCheck::new());
         agent.add_check(DiskUsageCheck);
         agent.add_check(NTPDriftCheck);
+        agent.add_check(IoWaitCheck::new());
 
         agent.run_scheduler().await;
     });
