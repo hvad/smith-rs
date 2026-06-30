@@ -763,6 +763,7 @@ dependencies = [
  "chrono",
  "daemonize",
  "lettre",
+ "libc",
  "rsntp",
  "serde",
  "serde_yaml",

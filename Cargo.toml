@@ -14,3 +14,4 @@ lettre = { version = "0.11", default-features = false, features = ["tokio1-rustl
 rsntp = "4.0"
 async-trait = "0.1"
 daemonize = "0.5"
+libc = "0.2"

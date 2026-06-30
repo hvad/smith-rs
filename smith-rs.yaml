@@ -60,7 +60,7 @@ services:
 
   - name: "iowait"
     description: "I/O Wait Check"
-    active: true
+    active: false
     check_interval: 15
     check_attempts: 3
     check_time_period: "24x7"
@@ -75,6 +75,16 @@ services:
     check_time_period: "24x7"
     warning: 90
     critical: 95
+    disks: ["/", "/System/Volumes/Data"]
+
+  - name: "inodes"
+    description: "Inode Utilization Check"
+    active: true
+    check_interval: 60
+    check_attempts: 2
+    check_time_period: "24x7"
+    warning: 80.0
+    critical: 90.0
     disks: ["/", "/System/Volumes/Data"]
 
   - name: "ntp"
