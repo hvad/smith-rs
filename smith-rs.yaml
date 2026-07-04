@@ -87,6 +87,16 @@ services:
     critical: 90.0
     disks: ["/", "/System/Volumes/Data"]
 
+  - name: "iops"
+    description: "Input/Output Operations Per Second"
+    active: true
+    check_interval: 15
+    check_attempts: 3
+    check_time_period: "24x7"
+    warning: 1500.0   # Alert if total IOPS exceed 1500 ops/sec
+    critical: 3000.0  # Alert if total IOPS exceed 3000 ops/sec
+    disks: ["sda", "sdb"]
+
   - name: "ntp"
     description: "NTP Drift"
     active: true

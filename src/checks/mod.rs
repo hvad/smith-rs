@@ -1,5 +1,6 @@
 pub mod disk;
 pub mod inodes;
+pub mod iops;
 pub mod iowait;
 pub mod load;
 pub mod memory;

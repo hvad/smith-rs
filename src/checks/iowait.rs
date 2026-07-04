@@ -1,22 +1,27 @@
 use crate::checks::{BaseCheck, CheckResult};
 use crate::config::AppConfig;
-use std::fs::File;
-use std::io::{BufRead, BufReader};
+
+#[cfg(target_os = "linux")]
 use tokio::sync::Mutex;
 
 pub struct IoWaitCheck {
-    // Stores the last observed (iowait_ticks, total_ticks)
+    #[cfg(target_os = "linux")]
     last_ticks: Mutex<Option<(u64, u64)>>,
 }
 
 impl IoWaitCheck {
     pub fn new() -> Self {
         IoWaitCheck {
+            #[cfg(target_os = "linux")]
             last_ticks: Mutex::new(None),
         }
     }
 
+    #[cfg(target_os = "linux")]
     fn sample_cpu_ticks(&self) -> Option<(u64, u64)> {
+        use std::fs::File;
+        use std::io::{BufRead, BufReader};
+
         let file = File::open("/proc/stat").ok()?;
         let reader = BufReader::new(file);
 
@@ -30,7 +35,6 @@ impl IoWaitCheck {
                     let idle: u64 = parts[4].parse().unwrap_or(0);
                     let iowait: u64 = parts[5].parse().unwrap_or(0);
 
-                    // Sum remaining fields if present (irq, softirq, steal, guest, guest_nice)
                     let rest: u64 = parts[6..]
                         .iter()
                         .map(|s| s.parse::<u64>().unwrap_or(0))
@@ -59,6 +63,7 @@ impl BaseCheck for IoWaitCheck {
         15
     }
 
+    #[cfg(target_os = "linux")]
     async fn run(&self, config: &AppConfig) -> Option<CheckResult> {
         let (warn, crit) = if let Some(sc) = config.services.get(self.config_key()) {
             (sc.warning, sc.critical)
@@ -75,13 +80,13 @@ impl BaseCheck for IoWaitCheck {
 
             if delta_total > 0 {
                 let percent = (delta_iowait as f64 / delta_total as f64) * 100.0;
-                let mut status = "OK".to_string();
-
-                if percent >= crit {
-                    status = "CRITICAL".to_string();
+                let status = if percent >= crit {
+                    "CRITICAL".to_string()
                 } else if percent >= warn {
-                    status = "WARNING".to_string();
-                }
+                    "WARNING".to_string()
+                } else {
+                    "OK".to_string()
+                };
 
                 Some(CheckResult::Single {
                     status,
@@ -91,15 +96,18 @@ impl BaseCheck for IoWaitCheck {
                 None
             }
         } else {
-            // First run baseline collection message
             Some(CheckResult::Single {
                 status: "OK".to_string(),
                 message: "Initializing metric baseline".to_string(),
             })
         };
 
-        // Cache the current metrics for the next check interval transition
         *guard = Some(current);
         result
+    }
+
+    #[cfg(not(target_os = "linux"))]
+    async fn run(&self, _config: &AppConfig) -> Option<CheckResult> {
+        None
     }
 }
