@@ -2,7 +2,10 @@ use crate::checks::{BaseCheck, CheckResult};
 use crate::config::AppConfig;
 
 #[cfg(target_os = "linux")]
-use std::{collections::HashMap, time::Instant, tokio::sync::Mutex};
+use std::{collections::HashMap, time::Instant};
+
+#[cfg(target_os = "linux")]
+use tokio::sync::Mutex;
 
 #[cfg(target_os = "linux")]
 struct DiskSamples {
