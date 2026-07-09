@@ -21,7 +21,7 @@ thread contention or resource degradation on production instances.
     *   **Memory**: RAM utilization percentages.
     *   **Disk**: Multi-mount point storage space validation.
     *   **NTP**: Clock drift measurements against an external NTP pool server.
-*   **Daemonization**: Built-in support to safely detach, fork, and run as a low-overhead system background daemon[cite: 1].
+*   **Daemonization**: Built-in support to safely detach, fork, and run as a low-overhead system background daemon.
 
 ---
 
@@ -48,7 +48,8 @@ The high-efficiency compiled executable will be located under `./target/release/
 
 
 ## Configuration (config.yaml)
-The agent uses a single structured config.yaml file to define settings, time schedules, contacts, and monitoring thresholds:
+The agent uses a single structured config.yaml file to define settings, time schedules, contacts,
+and monitoring thresholds:
 
 ```yaml
 setting:
@@ -88,7 +89,7 @@ timeperiods:
 contacts:
   - name: "john_smith"
     alias: "John Smith"
-    email: "john.smiths@matrix.gov"
+    email: "john.smiths@matrix.local"
     notification_period: "work_hours"
     notification_options: ["w", "u", "c", "r"] # warning, unknown, critical, recovery
 
@@ -137,16 +138,20 @@ services:
 
 ## State Machine & Notification Logic
 
-Soft vs. Hard States
-When a service check fails for the first time, it enters a SOFT alert state. No email notification is sent yet.
+** Soft vs. Hard States **
+When a service check fails for the first time, it enters a SOFT alert state. No email notification
+is sent yet.
 
 The agent schedules a re-check based on the service interval.
 
-If the service check fails consistently up to check_attempts consecutive times, the state officially transitions into a HARD state.
+If the service check fails consistently up to check_attempts consecutive times, the state officially
+transitions into a HARD state.
 
-An email alert is immediately triggered and dispatched to all contacts whose operational timeperiod and flags match.
+An email alert is immediately triggered and dispatched to all contacts whose operational timeperiod
+and flags match.
 
-If an unhealthy service returns to nominal parameters, it immediately transitions to a HARD OK state and fires a recovery (r) notification.
+If an unhealthy service returns to nominal parameters, it immediately transitions to a HARD OK state
+and fires a recovery (r) notification.
 
 ---
 
