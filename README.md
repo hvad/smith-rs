@@ -139,6 +139,7 @@ services:
 ## State Machine & Notification Logic
 
 **Soft vs. Hard States**
+
 When a service check fails for the first time, it enters a SOFT alert state. No email notification
 is sent yet.
 
