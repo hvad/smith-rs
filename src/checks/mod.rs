@@ -5,6 +5,7 @@ pub mod iowait;
 pub mod load;
 pub mod memory;
 pub mod ntp;
+pub mod swap;
 
 use crate::config::AppConfig;
 use std::collections::HashMap;

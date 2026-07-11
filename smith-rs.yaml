@@ -58,6 +58,15 @@ services:
     warning: 85
     critical: 95
 
+  - name: "swap"
+    description: "Swap Space Utilization"
+    active: true
+    check_interval: 30
+    check_attempts: 3
+    check_time_period: "24x7"
+    warning: 40.0
+    critical: 70.0
+
   - name: "iowait"
     description: "I/O Wait Check"
     active: false

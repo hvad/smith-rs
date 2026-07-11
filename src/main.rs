@@ -10,6 +10,7 @@ use crate::checks::iowait::IoWaitCheck;
 use crate::checks::load::LoadAverageCheck;
 use crate::checks::memory::MemoryUsageCheck;
 use crate::checks::ntp::NTPDriftCheck;
+use crate::checks::swap::SwapUsageCheck;
 use crate::config::AppConfig;
 use crate::engine::SmithEngine;
 
@@ -58,6 +59,7 @@ fn main() {
 
         agent.add_check(LoadAverageCheck);
         agent.add_check(MemoryUsageCheck::new());
+        agent.add_check(SwapUsageCheck);
         agent.add_check(DiskUsageCheck);
         agent.add_check(NTPDriftCheck);
         agent.add_check(IoWaitCheck::new());
