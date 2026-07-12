@@ -106,6 +106,16 @@ services:
     critical: 3000.0  # Alert if total IOPS exceed 3000 ops/sec
     disks: ["sda", "sdb"]
 
+  - name: "network"
+    description: "Network Interface Throughput"
+    active: true
+    check_interval: 15
+    check_attempts: 2
+    check_time_period: "24x7"
+    warning: 600.0     # Alert threshold in Mbps
+    critical: 900.0    # Alert threshold in Mbps
+    disks: ["en0"] 
+
   - name: "ntp"
     description: "NTP Drift"
     active: true

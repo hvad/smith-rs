@@ -9,6 +9,7 @@ use crate::checks::iops::IopsCheck;
 use crate::checks::iowait::IoWaitCheck;
 use crate::checks::load::LoadAverageCheck;
 use crate::checks::memory::MemoryUsageCheck;
+use crate::checks::network::NetworkThroughputCheck;
 use crate::checks::ntp::NTPDriftCheck;
 use crate::checks::swap::SwapUsageCheck;
 use crate::config::AppConfig;
@@ -65,6 +66,7 @@ fn main() {
         agent.add_check(IoWaitCheck::new());
         agent.add_check(InodesUsageCheck);
         agent.add_check(IopsCheck::new());
+        agent.add_check(NetworkThroughputCheck::new());
 
         agent.run_scheduler().await;
     });

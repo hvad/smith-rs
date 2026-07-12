@@ -4,6 +4,7 @@ pub mod iops;
 pub mod iowait;
 pub mod load;
 pub mod memory;
+pub mod network;
 pub mod ntp;
 pub mod swap;
 
