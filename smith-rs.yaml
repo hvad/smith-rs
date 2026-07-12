@@ -116,6 +116,16 @@ services:
     critical: 900.0    # Alert threshold in Mbps
     disks: ["en0"] 
 
+  - name: "network_errors"
+    description: "Network Interface Errors and Drops"
+    active: true
+    check_interval: 15
+    check_attempts: 2
+    check_time_period: "24x7"
+    warning: 0.05      # Warning if there's minor burst activity
+    critical: 1.0      # Critical if losing >= 1 packet per second continuously
+    disks: ["en0"]  
+
   - name: "ntp"
     description: "NTP Drift"
     active: true

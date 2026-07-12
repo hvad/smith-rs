@@ -5,6 +5,7 @@ pub mod iowait;
 pub mod load;
 pub mod memory;
 pub mod network;
+pub mod network_errors;
 pub mod ntp;
 pub mod swap;
 
