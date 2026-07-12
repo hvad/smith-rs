@@ -20,6 +20,7 @@ thread contention or resource degradation on production instances.
     *   **Load**: 1, 5, and 15-minute system load averages.
     *   **Memory**: RAM utilization percentages.
     *   **Disk**: Multi-mount point storage space validation.
+    *   **Network**: Monitors interfaces for high traffic load, packet drops, or transmission errors before your network turns into a bottleneck..
     *   **NTP**: Clock drift measurements against an external NTP pool server.
 *   **Daemonization**: Built-in support to safely detach, fork, and run as a low-overhead system background daemon.
 
@@ -121,6 +122,36 @@ services:
     warning: 90.0
     critical: 95.0
     disks: ["/", "/var"]
+
+  - name: "iops"
+    description: "Input/Output Operations Per Second"
+    active: true
+    check_interval: 15
+    check_attempts: 3
+    check_time_period: "24x7"
+    warning: 1500.0   # Alert if total IOPS exceed 1500 ops/sec
+    critical: 3000.0  # Alert if total IOPS exceed 3000 ops/sec
+    disks: ["sda", "sdb"]
+
+  - name: "network"
+    description: "Network Interface Throughput"
+    active: true
+    check_interval: 15
+    check_attempts: 2
+    check_time_period: "24x7"
+    warning: 600.0     # Alert threshold in Mbps
+    critical: 900.0    # Alert threshold in Mbps
+    disks: ["eth0"] 
+
+  - name: "network_errors"
+    description: "Network Interface Errors and Drops"
+    active: true
+    check_interval: 15
+    check_attempts: 2
+    check_time_period: "24x7"
+    warning: 0.05      # Warning if there's minor burst activity
+    critical: 1.0      # Critical if losing >= 1 packet per second continuously
+    disks: ["eth0"]  
 
   - name: "ntp"
     description: "NTP Drift"
