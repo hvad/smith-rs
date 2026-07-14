@@ -93,11 +93,10 @@ impl SmithEngine {
         }
 
         // Dynamically extract the full description from configuration using the base check_key.
-        // If a check_key contains sub-elements (like "iops_sda"), we split it to find the root key ("iops").
         let root_key = check_key.split('_').next().unwrap_or(check_key);
         let service_desc = self.config.get_description(root_key);
 
-        // If it's a multi-metric (like dynamic disks or networks), append the sub-item details to the description
+        // If it's a multi-metric (like dynamic disks or networks), append the sub-item details
         let display_name = if category.contains('(') {
             if let Some(sub_detail) = category.split(" (").nth(1) {
                 format!("{} ({}", service_desc, sub_detail)
@@ -113,7 +112,7 @@ impl SmithEngine {
             "{} - SERVICE : {};{};{};{}/{};{}\n",
             timestamp,
             self.config.system.hostname,
-            display_name, // Now cleanly logs "Load Average", "Disk IOPS (sda)", etc.
+            display_name,
             state.current_state,
             state.state_type,
             state.current_attempt,
@@ -130,13 +129,33 @@ impl SmithEngine {
         }
 
         if notify {
+            // Generate structured NOTIFICATION log entry
+            let notification_timestamp = Local::now().format("%Y-%m-%d %H:%M:%S").to_string();
+            let notification_log = format!(
+                "{} - NOTIFICATION : {};{};{};{}\n",
+                notification_timestamp,
+                self.config.system.hostname,
+                display_name,
+                state.last_hard_state,
+                message
+            );
+
+            // Output to console and append to the active log file path
+            print!("{}", notification_log);
+            if let Ok(mut file) = OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(&self.config.setting.log_file_path)
+            {
+                let _ = file.write_all(notification_log.as_bytes());
+            }
+
             let email_alert_clone = Arc::clone(&self.email_alert);
             let ck = check_key.to_string();
-            let cat = display_name; // Use the rich name description for email notifications as well
+            let cat = display_name;
             let st = state.last_hard_state.clone();
             let msg = message.to_string();
             tokio::spawn(async move {
-                // Silences the warning: unused `Result` that must be used by capturing it with an anonymous binding
                 let _ = email_alert_clone
                     .send_nagios_hard_alert(&ck, &cat, &st, &msg)
                     .await;
