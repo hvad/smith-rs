@@ -129,59 +129,77 @@ impl SmithEngine {
         }
 
         if notify {
-            // Generate structured NOTIFICATION log entry
-            let notification_timestamp = Local::now().format("%Y-%m-%d %H:%M:%S").to_string();
-            let notification_log = format!(
-                "{} - NOTIFICATION : {};{};{};{}\n",
-                notification_timestamp,
-                self.config.system.hostname,
-                display_name,
-                state.last_hard_state,
-                message
-            );
+            // Check if debug mode is active in the YAML config properties
+            if self.config.setting.debug {
+                let debug_timestamp = Local::now().format("%Y-%m-%d %H:%M:%S").to_string();
+                let debug_log = format!(
+                    "{} - [DEBUG] NOTIFICATION : {};{};{};Alert trigger bypassed (SMTP suppressed in debug mode)\n",
+                    debug_timestamp,
+                    self.config.system.hostname,
+                    display_name,
+                    state.last_hard_state
+                );
 
-            // Output to console and append to the active log file path
-            print!("{}", notification_log);
-            if let Ok(mut file) = OpenOptions::new()
-                .create(true)
-                .append(true)
-                .open(&self.config.setting.log_file_path)
-            {
-                let _ = file.write_all(notification_log.as_bytes());
-            }
-
-            let email_alert_clone = Arc::clone(&self.email_alert);
-            let ck = check_key.to_string();
-            let cat = display_name;
-            let st = state.last_hard_state.clone();
-            let msg = message.to_string();
-
-            // Clone configuration parameters needed by the asynchronous worker thread
-            let log_file_path = self.config.setting.log_file_path.clone();
-            let hostname = self.config.system.hostname.clone();
-
-            tokio::spawn(async move {
-                // If the SMTP transport fails, catch the error and log it to the file
-                if let Err(err) = email_alert_clone
-                    .send_nagios_hard_alert(&ck, &cat, &st, &msg)
-                    .await
+                print!("{}", debug_log);
+                if let Ok(mut file) = OpenOptions::new()
+                    .create(true)
+                    .append(true)
+                    .open(&self.config.setting.log_file_path)
                 {
-                    let error_timestamp = Local::now().format("%Y-%m-%d %H:%M:%S").to_string();
-                    let error_log = format!(
-                        "{} - ERROR : {};{};Notification failed to send: {}\n",
-                        error_timestamp, hostname, cat, err
-                    );
-
-                    print!("{}", error_log);
-                    if let Ok(mut file) = OpenOptions::new()
-                        .create(true)
-                        .append(true)
-                        .open(&log_file_path)
-                    {
-                        let _ = file.write_all(error_log.as_bytes());
-                    }
+                    let _ = file.write_all(debug_log.as_bytes());
                 }
-            });
+            } else {
+                // Production execution trail: write standard NOTIFICATION log entry and send email
+                let notification_timestamp = Local::now().format("%Y-%m-%d %H:%M:%S").to_string();
+                let notification_log = format!(
+                    "{} - NOTIFICATION : {};{};{};{}\n",
+                    notification_timestamp,
+                    self.config.system.hostname,
+                    display_name,
+                    state.last_hard_state,
+                    message
+                );
+
+                print!("{}", notification_log);
+                if let Ok(mut file) = OpenOptions::new()
+                    .create(true)
+                    .append(true)
+                    .open(&self.config.setting.log_file_path)
+                {
+                    let _ = file.write_all(notification_log.as_bytes());
+                }
+
+                let email_alert_clone = Arc::clone(&self.email_alert);
+                let ck = check_key.to_string();
+                let cat = display_name;
+                let st = state.last_hard_state.clone();
+                let msg = message.to_string();
+
+                let log_file_path = self.config.setting.log_file_path.clone();
+                let hostname = self.config.system.hostname.clone();
+
+                tokio::spawn(async move {
+                    if let Err(err) = email_alert_clone
+                        .send_nagios_hard_alert(&ck, &cat, &st, &msg)
+                        .await
+                    {
+                        let error_timestamp = Local::now().format("%Y-%m-%d %H:%M:%S").to_string();
+                        let error_log = format!(
+                            "{} - ERROR : {};{};Notification failed to send: {}\n",
+                            error_timestamp, hostname, cat, err
+                        );
+
+                        print!("{}", error_log);
+                        if let Ok(mut file) = OpenOptions::new()
+                            .create(true)
+                            .append(true)
+                            .open(&log_file_path)
+                        {
+                            let _ = file.write_all(error_log.as_bytes());
+                        }
+                    }
+                });
+            }
         }
     }
 
