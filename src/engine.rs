@@ -92,12 +92,28 @@ impl SmithEngine {
             }
         }
 
+        // Dynamically extract the full description from configuration using the base check_key.
+        // If a check_key contains sub-elements (like "iops_sda"), we split it to find the root key ("iops").
+        let root_key = check_key.split('_').next().unwrap_or(check_key);
+        let service_desc = self.config.get_description(root_key);
+
+        // If it's a multi-metric (like dynamic disks or networks), append the sub-item details to the description
+        let display_name = if category.contains('(') {
+            if let Some(sub_detail) = category.split(" (").nth(1) {
+                format!("{} ({}", service_desc, sub_detail)
+            } else {
+                service_desc
+            }
+        } else {
+            service_desc
+        };
+
         let timestamp = Local::now().format("%Y-%m-%d %H:%M:%S").to_string();
         let log_entry = format!(
             "{} - SERVICE : {};{};{};{}/{};{}\n",
             timestamp,
             self.config.system.hostname,
-            category,
+            display_name, // Now cleanly logs "Load Average", "Disk IOPS (sda)", etc.
             state.current_state,
             state.state_type,
             state.current_attempt,
@@ -116,11 +132,12 @@ impl SmithEngine {
         if notify {
             let email_alert_clone = Arc::clone(&self.email_alert);
             let ck = check_key.to_string();
-            let cat = category.to_string();
+            let cat = display_name; // Use the rich name description for email notifications as well
             let st = state.last_hard_state.clone();
             let msg = message.to_string();
             tokio::spawn(async move {
-                email_alert_clone
+                // Silences the warning: unused `Result` that must be used by capturing it with an anonymous binding
+                let _ = email_alert_clone
                     .send_nagios_hard_alert(&ck, &cat, &st, &msg)
                     .await;
             });

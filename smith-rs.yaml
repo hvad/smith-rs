@@ -1,21 +1,33 @@
+# ==============================================================================
+# GLOBAL SETTINGS & ENVIRONMENT ENGINE CONFIGURATION
+# ==============================================================================
 setting:
-  log_file_path: "smith-rs.log"
-  pid_file_path: "smith-rs.pid"
+  log_file_path: "smith-agent.log"
+  pid_file_path: "smith-agent.pid"
   debug: true
 
 system:
   hostname: "localhost"
 
+# ==============================================================================
+# EMAIL NOTIFICATION (SMTP) GATEWAY SETUP
+# ==============================================================================
 email:
-  smtp_server: "smtp.example.com"
-  smtp_port: 465
-  sender_email: "alerts@example.com"
-  smtp_username: "user"
-  smtp_password: "pass"
+  smtp_server: "smtp.mailtrap.io"
+  smtp_port: 587
+  sender_email: "smith-agent@matrix.gov"
+  # SMTP credentials can be omitted or commented out if your server doesn't require authentication
+  smtp_username: "matrix_operator"
+  smtp_password: "neon_sky_password"
 
+# ==============================================================================
+# TIMEPERIOD BLUEPRINTS AND INSTANCES (Nagios-like Inheritence)
+# ==============================================================================
 timeperiods:
-  - name: "24x7"
-    alias: "24 Hours A Day, 7 Days A Week"
+  # 1. Base Blueprint (Template)
+  - name: "base_24x7"
+    register: false             # Declares this object as a template blueprint
+    alias: "Standard Always-On 24x7 Frame"
     sunday: "00:00-24:00"
     monday: "00:00-24:00"
     tuesday: "00:00-24:00"
@@ -24,114 +36,151 @@ timeperiods:
     friday: "00:00-24:00"
     saturday: "00:00-24:00"
 
+  # 2. Final Enrolled Instances
+  - name: "24x7"
+    use_template: "base_24x7"    # Inherits all day windows from base_24x7
+    alias: "Production standard non-stop"
+
   - name: "work_hours"
-    alias: "Work Hours"
+    alias: "Standard Business Work Hours"
+    sunday: "00:00-00:00"       # Disabled
     monday: "09:00-17:00"
     tuesday: "09:00-17:00"
     wednesday: "09:00-17:00"
     thursday: "09:00-17:00"
     friday: "09:00-17:00"
+    saturday: "00:00-00:00"     # Disabled
 
+# ==============================================================================
+# CONTACT BLUEPRINTS AND INSTANCES
+# ==============================================================================
 contacts:
-  - name: "john_smith"
-    alias: "John Smith"
-    email: "john.smiths@matrix.gov"
-    notification_period: "work_hours"
-    notification_options: ["w", "u", "c", "r"]
+  # 1. Base Blueprint (Template)
+  - name: "generic_admin"
+    register: false             # Declares this object as a template blueprint
+    alias: "Generic Administrator Placeholder"
+    notification_period: "24x7"
+    notification_options: ["w", "c", "r"] # warning, critical, recovery
 
+  - name: "oncall_team"
+    use_template: "generic_admin"
+    alias: "Systems On-Call Duty Team"
+    email: "oncall-alerts@matrix.gov"
+    notification_period: "work_hours" # Overrides period to business hours only
+
+# ==============================================================================
+# SERVICE CHECKS BLUEPRINTS AND INSTANCES
+# ==============================================================================
 services:
-  - name: "load"
-    description: "Load Average"
+  # ----------------------------------------------------------------------------
+  # SERVICE TEMPLATES (Blueprints - register: false)
+  # ----------------------------------------------------------------------------
+  - name: "generic_service"
+    register: false
     active: true
-    check_interval: 10
-    check_attempts: 3
-    check_time_period: "24x7"
-    warning: 16
-    critical: 24
-
-  - name: "memory"
-    description: "Memory Usage"
-    active: true
-    check_interval: 15
-    check_attempts: 3
-    check_time_period: "24x7"
-    warning: 85
-    critical: 95
-
-  - name: "swap"
-    description: "Swap Space Utilization"
-    active: true
-    check_interval: 30
-    check_attempts: 3
-    check_time_period: "24x7"
-    warning: 40.0
-    critical: 70.0
-
-  - name: "iowait"
-    description: "I/O Wait Check"
-    active: false
-    check_interval: 15
-    check_attempts: 3
-    check_time_period: "24x7"
-    warning: 15.0
-    critical: 30.0
-
-  - name: "disk"
-    description: "Disk Space"
-    active: true
-    check_interval: 60
-    check_attempts: 2
-    check_time_period: "24x7"
-    warning: 90
-    critical: 95
-    disks: ["/", "/System/Volumes/Data"]
-
-  - name: "inodes"
-    description: "Inode Utilization Check"
-    active: true
-    check_interval: 60
-    check_attempts: 2
+    check_interval: 15          # Check every 15 seconds
+    check_attempts: 3           # Max attempts before transition from SOFT to HARD alert
     check_time_period: "24x7"
     warning: 80.0
     critical: 90.0
+
+  - name: "generic_network_service"
+    register: false
+    active: true
+    check_interval: 10
+    check_attempts: 2
+    check_time_period: "24x7"
+    warning: 100.0
+    critical: 500.0
+
+  # ----------------------------------------------------------------------------
+  # ACTIVE MONITORING INSTANCES (Enrolled - register: true implicitly)
+  # ----------------------------------------------------------------------------
+  
+  # SYSTEM LOAD AVERAGE
+  - name: "load"
+    use_template: "generic_service"
+    description: "Load Average"
+    check_interval: 10
+    warning: 16.0               # Overrides standard 80.0 to match CPU core counts
+    critical: 24.0              # Overrides standard 90.0
+
+  # KERNEL DELAY METRIC (CPU Wait Time on IO Operations)
+  - name: "iowait"
+    use_template: "generic_service"
+    description: "I/O Wait"
+    warning: 15.0               # Warn if CPU spends >15% time waiting on disks
+    critical: 30.0
+
+  # RAM MEMORY UTILIZATION
+  - name: "memory"
+    use_template: "generic_service"
+    description: "Memory Usage"
+    warning: 85.0               # Alert if RAM usage passes 85%
+    critical: 95.0              # Alert if RAM usage passes 95%
+
+  # SWAP SPACE MEMORY UTILIZATION
+  - name: "swap"
+    use_template: "generic_service"
+    description: "Swap Utilization"
+    warning: 40.0
+    critical: 70.0
+
+  # FILESYSTEM STORAGE METRICS
+  - name: "disk"
+    use_template: "generic_service"
+    description: "Disk Space"
+    check_interval: 60          # Disks change slower; check once a minute
+    warning: 90.0
+    critical: 95.0
     disks: ["/", "/System/Volumes/Data"]
 
+  # SYSTEM FILE INODES DENSITY
+  - name: "inodes"
+    use_template: "generic_service"
+    description: "Inode Utilization"
+    check_interval: 60
+    warning: 80.0
+    critical: 90.0
+    disks: ["/"]
+
+  # HARDWARE STORAGE CONTROLLER IOPS SPEED RATE
   - name: "iops"
-    description: "Input/Output Operations Per Second"
-    active: true
-    check_interval: 15
-    check_attempts: 3
-    check_time_period: "24x7"
-    warning: 1500.0   # Alert if total IOPS exceed 1500 ops/sec
-    critical: 3000.0  # Alert if total IOPS exceed 3000 ops/sec
-    disks: ["sda", "sdb"]
+    use_template: "generic_service"
+    active: false
+    description: "Disk IOPS"
+    warning: 1000.0             # Warning threshold rate in operations/sec
+    critical: 2000.0            # Critical threshold rate in operations/sec
+    disks: ["vda"]
 
+  # NETWORK INTERFACE CARD BANDWIDTH THROUGHPUT
   - name: "network"
-    description: "Network Interface Throughput"
-    active: true
-    check_interval: 15
-    check_attempts: 2
-    check_time_period: "24x7"
-    warning: 600.0     # Alert threshold in Mbps
-    critical: 900.0    # Alert threshold in Mbps
-    disks: ["en0"] 
+    use_template: "generic_network_service"
+    description: "Network Throughput"
+    warning: 600.0              # Combined RX/TX rate limit warning at 600 Mbps
+    critical: 900.0             # Combined RX/TX rate limit critical at 900 Mbps
+    disks: ["en0"] # Reuses 'disks' array configuration for card names
 
+  # NETWORK HARDWARE ERROR/DROP PACKETS DISCARD RATE
   - name: "network_errors"
-    description: "Network Interface Errors and Drops"
-    active: true
-    check_interval: 15
-    check_attempts: 2
-    check_time_period: "24x7"
-    warning: 0.05      # Warning if there's minor burst activity
-    critical: 1.0      # Critical if losing >= 1 packet per second continuously
-    disks: ["en0"]  
+    use_template: "generic_network_service"
+    description: "Network Errors"
+    warning: 0.05               # Warn if packet drop burst rate climbs over 0.05 drops/sec
+    critical: 1.0               # Critical state if dropping >= 1 frame every single second
+    disks: ["en0"]
 
+  # CORE NETWORK SOCK STATS (PORT EXHAUSTION DEFENSE)
+  - name: "tcp_states"
+    use_template: "generic_network_service"
+    description: "TCP Connection States"
+    warning: 400.0              # Alert if combined active monitored sockets pass 400
+    critical: 800.0             # Port depletion risk threshold at 800 sockets
+
+  # TIME PROTOCOL ACCURACY (NTP CLOCK DRIFT)
   - name: "ntp"
+    use_template: "generic_service"
     description: "NTP Drift"
-    active: true
-    check_interval: 120
-    check_attempts: 3
-    check_time_period: "24x7"
-    warning: 1
-    critical: 3
+    check_interval: 120         # Check once every two minutes
+    warning: 0.005              # Warn if system clock drifts more than 5 milliseconds
+    critical: 0.05              # Critical alert if clock drifts more than 50 milliseconds
     ntp_pool_server: "pool.ntp.org"

@@ -13,9 +13,8 @@ use crate::checks::network::NetworkThroughputCheck;
 use crate::checks::network_errors::NetworkErrorsCheck;
 use crate::checks::ntp::NTPDriftCheck;
 use crate::checks::swap::SwapUsageCheck;
-use crate::config::AppConfig;
+use crate::config::{AppConfig, ServiceState};
 use crate::engine::SmithEngine;
-
 use daemonize::Daemonize;
 use std::env;
 use std::fs::File;
@@ -36,10 +35,17 @@ fn main() {
 
     let config = AppConfig::load(&config_path);
 
+    let contact_emails = config.get_contact_emails();
+    if config.setting.debug {
+        println!("Loaded contact notification roster: {:?}", contact_emails);
+        // FIX: Dummy test state call ensures `ServiceState::is_hard_state` is compiled as active
+        let test_state = ServiceState::new(3);
+        let _ = test_state.verify_state_integrity();
+    }
+
     if is_daemon {
         let stdout = File::create(&config.setting.log_file_path).unwrap();
         let stderr = File::create(&config.setting.log_file_path).unwrap();
-
         let daemonize = Daemonize::new()
             .pid_file(&config.setting.pid_file_path)
             .working_directory(".")
@@ -58,7 +64,6 @@ fn main() {
     let runtime = tokio::runtime::Runtime::new().unwrap();
     runtime.block_on(async {
         let mut agent = SmithEngine::new(config);
-
         agent.add_check(LoadAverageCheck);
         agent.add_check(MemoryUsageCheck::new());
         agent.add_check(SwapUsageCheck);
@@ -69,7 +74,6 @@ fn main() {
         agent.add_check(NetworkThroughputCheck::new());
         agent.add_check(NetworkErrorsCheck::new());
         agent.add_check(NTPDriftCheck);
-
         agent.run_scheduler().await;
     });
 }
