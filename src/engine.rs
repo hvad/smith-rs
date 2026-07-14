@@ -155,10 +155,32 @@ impl SmithEngine {
             let cat = display_name;
             let st = state.last_hard_state.clone();
             let msg = message.to_string();
+
+            // Clone configuration parameters needed by the asynchronous worker thread
+            let log_file_path = self.config.setting.log_file_path.clone();
+            let hostname = self.config.system.hostname.clone();
+
             tokio::spawn(async move {
-                let _ = email_alert_clone
+                // If the SMTP transport fails, catch the error and log it to the file
+                if let Err(err) = email_alert_clone
                     .send_nagios_hard_alert(&ck, &cat, &st, &msg)
-                    .await;
+                    .await
+                {
+                    let error_timestamp = Local::now().format("%Y-%m-%d %H:%M:%S").to_string();
+                    let error_log = format!(
+                        "{} - ERROR : {};{};Notification failed to send: {}\n",
+                        error_timestamp, hostname, cat, err
+                    );
+
+                    print!("{}", error_log);
+                    if let Ok(mut file) = OpenOptions::new()
+                        .create(true)
+                        .append(true)
+                        .open(&log_file_path)
+                    {
+                        let _ = file.write_all(error_log.as_bytes());
+                    }
+                }
             });
         }
     }
