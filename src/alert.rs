@@ -59,7 +59,7 @@ impl AlertSystem {
         }
     }
 
-    /// State is now accepted as a string slice (&str) to match engine expectations
+    // State is now accepted as a string slice (&str) to match engine expectations
     pub async fn send_nagios_hard_alert(
         &self,
         check_name: &str,
