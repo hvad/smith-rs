@@ -1,6 +1,9 @@
+// Serde (Serializer/Deserializer) is the standard library for parsing data in Rust.
+// 'Deserialize' is a Rust macro (derived trait) that automatically generates code
+// to convert structured text (like YAML or JSON) into our custom Rust structs.
 use serde::Deserialize;
-use std::collections::HashMap;
-use std::fs;
+use std::collections::HashMap; // A standard key-value map implementation
+use std::fs; // Standard filesystem library for reading/writing files
 
 // ==========================================
 // 1. UTILITY FUNCTIONS AND STRUCTS
@@ -19,6 +22,7 @@ pub struct ServiceState {
 }
 
 impl ServiceState {
+    /// A custom constructor to initialize the state tracker with default values
     pub fn new(max_attempts: u32) -> Self {
         Self {
             current_state: "OK".to_string(),
@@ -30,12 +34,16 @@ impl ServiceState {
         }
     }
 
-    /// FIX: Actively uses the is_hard_state property to satisfy dead-code analysis
+    /// This helper method prevents Rust's compiler from issuing "dead code" warnings.
+    /// In Rust, if a struct property (like `is_hard_state`) is parsed but never read
+    /// elsewhere in active logic, the compiler flags it as unused.
     pub fn verify_state_integrity(&self) -> bool {
         self.is_hard_state || !self.is_hard_state
     }
 }
 
+/// Helper function providing default values for Serde deserialization.
+/// If 'register' is missing in the YAML file, Serde calls this function to set it to true.
 fn default_register() -> bool {
     true
 }
@@ -43,6 +51,9 @@ fn default_register() -> bool {
 // ==========================================
 // 2. RAW CONFIGURATION STRUCTURES (PASS 1)
 // ==========================================
+// These structs represent the YAML file exactly as written by the user.
+// Properties use 'Option<T>' because fields might be missing (e.g. if they are inherited from templates).
+// If a user defines a blueprint, they set 'register: false'.
 
 #[derive(Debug, Deserialize, Clone)]
 pub struct RawSettingConfig {
@@ -68,9 +79,9 @@ pub struct RawEmailConfig {
 #[derive(Debug, Deserialize, Clone)]
 pub struct RawTimePeriodConfig {
     pub name: String,
-    #[serde(default = "default_register")]
+    #[serde(default = "default_register")] // Falls back to true if omitted
     pub register: bool,
-    pub use_template: Option<String>,
+    pub use_template: Option<String>, // Key of the template to inherit from
     pub alias: Option<String>,
     pub sunday: Option<String>,
     pub monday: Option<String>,
@@ -110,6 +121,7 @@ pub struct RawServiceConfig {
     pub ntp_pool_server: Option<String>,
 }
 
+/// The temporary, brute-parsed root struct matching our raw YAML layout
 #[derive(Debug, Deserialize)]
 pub struct AppConfigBrute {
     pub setting: RawSettingConfig,
@@ -123,6 +135,9 @@ pub struct AppConfigBrute {
 // ==========================================
 // 3. FINAL RESOLVED STRUCTURES (PASS 2)
 // ==========================================
+// These are clean, fully resolved configurations used by the main application.
+// There are no 'Option' wraps on mandatory properties here: if an optional property
+// was omitted, our resolution engine merged it with its template or supplied a default value.
 
 #[derive(Debug, Clone)]
 pub struct TimePeriodConfig {
@@ -138,7 +153,8 @@ pub struct TimePeriodConfig {
 }
 
 impl TimePeriodConfig {
-    /// FIX: Read schedule configuration strings so that the fields are considered active by Rust
+    /// Evaluates if the current check is authorized to execute in this time frame.
+    /// Consuming these schedule strings prevents compiler dead-code warnings.
     pub fn is_active_now(&self) -> bool {
         let _active_schedules = (
             &self.alias,
@@ -173,10 +189,12 @@ pub struct ServiceConfig {
     pub check_time_period: String,
     pub warning: f64,
     pub critical: f64,
-    pub disks: Option<Vec<String>>,
+    pub disks: Option<Vec<String>>, // Keeps Option because some checks don't use disks
     pub ntp_pool_server: Option<String>,
 }
 
+/// The final parsed config tree containing mapped structures instead of flat vectors.
+/// Lookups are now highly optimized ($O(1)$ complexity) using hash maps.
 #[derive(Debug, Clone)]
 pub struct AppConfig {
     pub setting: RawSettingConfig,
@@ -188,7 +206,8 @@ pub struct AppConfig {
 }
 
 impl AppConfig {
-    /// Resolves description data fields dynamically for logging output engines
+    /// Dynamic lookup helper to safely fetch the description of a service.
+    /// If the service key does not exist, it falls back to the key itself.
     pub fn get_description(&self, service_key: &str) -> String {
         self.services
             .get(service_key)
@@ -196,7 +215,8 @@ impl AppConfig {
             .unwrap_or_else(|| service_key.to_string())
     }
 
-    /// Helper utility resolving contact rosters dynamically
+    /// Functional lookup mapping over our contacts to gather alert destination emails.
+    /// Reading internal fields (like alias, options) here prevents unused-field warnings.
     pub fn get_contact_emails(&self) -> Vec<String> {
         self.contacts
             .values()
@@ -213,7 +233,9 @@ impl AppConfig {
 // ==========================================
 
 impl AppConfig {
+    /// Loads a YAML file, parses it, resolves templates inheritance, and builds the AppConfig struct.
     pub fn load(path: &str) -> Self {
+        // Read the file contents as a UTF-8 string. Panic if the file is missing or unreadable.
         let content = fs::read_to_string(path).unwrap_or_else(|e| {
             panic!(
                 "Critical Error: Failed to open config file at '{}': {}",
@@ -221,22 +243,28 @@ impl AppConfig {
             )
         });
 
+        // Parse raw YAML string using Serde. Panic if there are syntax errors.
         let brute: AppConfigBrute = serde_yaml::from_str(&content)
             .unwrap_or_else(|e| panic!("Critical Error: Invalid YAML syntax structure: {}", e));
 
-        // PHASE 1: TIMEPERIODS
-        let mut timeperiod_templates = HashMap::new();
+        // ----------------------------------------------------------------------
+        // PHASE 1: TIMEPERIOD RESOLUTION
+        // ----------------------------------------------------------------------
+        // Separate actual timeperiods from template blueprints (register: false)
+        let mut timeperiod_templates = HashMap::with_capacity(brute.timeperiods.len());
         for tp in &brute.timeperiods {
             if !tp.register {
                 timeperiod_templates.insert(tp.name.clone(), tp.clone());
             }
         }
 
-        let mut resolved_timeperiods = HashMap::new();
+        let mut resolved_timeperiods = HashMap::with_capacity(brute.timeperiods.len());
         for raw in brute.timeperiods {
             if !raw.register {
                 continue;
-            }
+            } // Skip template blueprints
+
+            // If this entry inherits from a template, get it; otherwise use the entry itself as the base
             let base = if let Some(ref t_name) = raw.use_template {
                 timeperiod_templates
                     .get(t_name)
@@ -251,6 +279,7 @@ impl AppConfig {
                 raw.clone()
             };
 
+            // Resolve values: use the entry's field if present, otherwise fall back to template or default value
             let final_tp = TimePeriodConfig {
                 name: raw.name.clone(),
                 alias: raw.alias.or(base.alias).unwrap_or_default(),
@@ -286,15 +315,17 @@ impl AppConfig {
             resolved_timeperiods.insert(final_tp.name.clone(), final_tp);
         }
 
-        // PHASE 2: CONTACTS
-        let mut contact_templates = HashMap::new();
+        // ----------------------------------------------------------------------
+        // PHASE 2: CONTACT RESOLUTION
+        // ----------------------------------------------------------------------
+        let mut contact_templates = HashMap::with_capacity(brute.contacts.len());
         for c in &brute.contacts {
             if !c.register {
                 contact_templates.insert(c.name.clone(), c.clone());
             }
         }
 
-        let mut resolved_contacts = HashMap::new();
+        let mut resolved_contacts = HashMap::with_capacity(brute.contacts.len());
         for raw in brute.contacts {
             if !raw.register {
                 continue;
@@ -329,15 +360,17 @@ impl AppConfig {
             resolved_contacts.insert(final_contact.name.clone(), final_contact);
         }
 
-        // PHASE 3: SERVICES
-        let mut service_templates = HashMap::new();
+        // ----------------------------------------------------------------------
+        // PHASE 3: SERVICE RESOLUTION
+        // ----------------------------------------------------------------------
+        let mut service_templates = HashMap::with_capacity(brute.services.len());
         for s in &brute.services {
             if !s.register {
                 service_templates.insert(s.name.clone(), s.clone());
             }
         }
 
-        let mut resolved_services = HashMap::new();
+        let mut resolved_services = HashMap::with_capacity(brute.services.len());
         for raw in brute.services {
             if !raw.register {
                 continue;
@@ -355,6 +388,7 @@ impl AppConfig {
 
             let final_service = ServiceConfig {
                 name: raw.name.clone(),
+                // If description is missing, fall back to template, or default to the service name itself
                 description: raw
                     .description
                     .or(base.description)
@@ -374,6 +408,7 @@ impl AppConfig {
             resolved_services.insert(final_service.name.clone(), final_service);
         }
 
+        // Return the clean, fully resolved configurations object!
         AppConfig {
             setting: brute.setting,
             system: brute.system,
