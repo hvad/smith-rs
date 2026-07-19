@@ -2,8 +2,8 @@
 # GLOBAL SETTINGS & ENVIRONMENT ENGINE CONFIGURATION
 # ==============================================================================
 setting:
-  log_file_path: "smith-agent.log"
-  pid_file_path: "smith-agent.pid"
+  log_file_path: "smith-rs.log"
+  pid_file_path: "smith-rs.pid"
   debug: true
 
 system:
