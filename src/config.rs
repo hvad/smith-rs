@@ -118,6 +118,7 @@ pub struct RawServiceConfig {
     pub warning: Option<f64>,
     pub critical: Option<f64>,
     pub disks: Option<Vec<String>>,
+    pub interfaces: Option<Vec<String>>,
     pub ntp_pool_server: Option<String>,
 }
 
@@ -190,6 +191,7 @@ pub struct ServiceConfig {
     pub warning: f64,
     pub critical: f64,
     pub disks: Option<Vec<String>>, // Keeps Option because some checks don't use disks
+    pub interfaces: Option<Vec<String>>,
     pub ntp_pool_server: Option<String>,
 }
 
@@ -403,6 +405,7 @@ impl AppConfig {
                 warning: raw.warning.or(base.warning).unwrap_or(80.0),
                 critical: raw.critical.or(base.critical).unwrap_or(90.0),
                 disks: raw.disks.or(base.disks),
+                interfaces: raw.interfaces.or(base.interfaces),
                 ntp_pool_server: raw.ntp_pool_server.or(base.ntp_pool_server),
             };
             resolved_services.insert(final_service.name.clone(), final_service);

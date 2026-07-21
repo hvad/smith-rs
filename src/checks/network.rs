@@ -1,197 +1,170 @@
+// Bring in the BaseCheck trait and CheckResult enum from our checks module
 use crate::checks::{BaseCheck, CheckResult};
+// Bring in the resolved global configurations
 use crate::config::AppConfig;
-use std::collections::HashMap;
-use std::time::Instant;
-use tokio::sync::Mutex;
 
-struct NetSample {
-    timestamp: Instant,
-    // Maps explicit card name (e.g., "eth0", "en0") to (rx_bytes, tx_bytes)
-    stats: HashMap<String, (u64, u64)>,
+use std::collections::HashMap; // Standard key-value map implementation
+use std::sync::Mutex; // Synchronous Mutex to safely handle shared mutable state across threads
+use std::time::Instant; // Used to calculate precise elapsed time between executions
+use sysinfo::Networks; // Import Networks struct from sysinfo crate to query interface data
+
+/// Holds historical metrics for calculating rate/throughput per second
+struct NetworkHistory {
+    last_rx_bytes: u64,
+    last_tx_bytes: u64,
+    last_check_time: Instant,
 }
 
-pub struct NetworkThroughputCheck {
-    last_sample: Mutex<Option<NetSample>>,
-}
+/// The main struct responsible for monitoring Network Throughput / Bandwidth (Mbps)
+pub struct NetworkCheck;
 
-impl NetworkThroughputCheck {
+impl NetworkCheck {
+    /// Public constructor initialization pipeline
     pub fn new() -> Self {
-        NetworkThroughputCheck {
-            last_sample: Mutex::new(None),
-        }
-    }
-
-    #[cfg(target_os = "linux")]
-    fn sample_network_bytes(&self) -> Option<HashMap<String, (u64, u64)>> {
-        use std::fs::File;
-        use std::io::{BufRead, BufReader};
-
-        let file = File::open("/proc/net/dev").ok()?;
-        let reader = BufReader::new(file);
-        let mut samples = HashMap::new();
-
-        for line in reader.lines().map_while(Result::ok) {
-            if let Some(idx) = line.find(':') {
-                let iface_name = line[..idx].trim().to_string();
-                let metrics_str = &line[idx + 1..];
-                let parts: Vec<&str> = metrics_str.split_whitespace().collect();
-
-                if parts.len() >= 9 {
-                    let rx_bytes: u64 = parts[0].parse().unwrap_or(0);
-                    let tx_bytes: u64 = parts[8].parse().unwrap_or(0);
-                    samples.insert(iface_name, (rx_bytes, tx_bytes));
-                }
-            }
-        }
-        Some(samples)
-    }
-
-    #[cfg(target_os = "macos")]
-    fn sample_network_bytes(&self) -> Option<HashMap<String, (u64, u64)>> {
-        use std::ffi::CStr;
-        use std::ptr;
-
-        let mut samples = HashMap::new();
-        let mut ifap: *mut libc::ifaddrs = ptr::null_mut();
-
-        unsafe {
-            if libc::getifaddrs(&mut ifap) != 0 {
-                return None;
-            }
-
-            let mut curr = ifap;
-            while !curr.is_null() {
-                let ifa = *curr;
-                if !ifa.ifa_addr.is_null() && (*ifa.ifa_addr).sa_family == libc::AF_LINK as u8 {
-                    let name = CStr::from_ptr(ifa.ifa_name).to_string_lossy().into_owned();
-                    if !ifa.ifa_data.is_null() {
-                        let if_data = *(ifa.ifa_data as *mut libc::if_data);
-                        let rx_bytes = if_data.ifi_ibytes as u64;
-                        let tx_bytes = if_data.ifi_obytes as u64;
-                        samples.insert(name, (rx_bytes, tx_bytes));
-                    }
-                }
-                curr = ifa.ifa_next;
-            }
-            libc::freeifaddrs(ifap);
-        }
-        Some(samples)
+        Self
     }
 }
 
+// Implement the BaseCheck trait asynchronously
 #[async_trait::async_trait]
-impl BaseCheck for NetworkThroughputCheck {
+impl BaseCheck for NetworkCheck {
+    /// Returns the human-readable name of this check
     fn name(&self) -> &'static str {
         "Network Throughput"
     }
 
+    /// Returns the configuration key used in the YAML file to customize this service
     fn config_key(&self) -> &'static str {
         "network"
     }
 
+    /// Default execution interval (10 seconds) if not overridden in the configuration
     fn default_period(&self) -> u64 {
-        15
+        10
     }
 
+    /// Asynchronously runs network bandwidth throughput monitoring on macOS and Linux
     async fn run(&self, config: &AppConfig) -> Option<CheckResult> {
-        // Warning & Critical match the configured threshold values (Mbps)
-        let (warn, crit, raw_interfaces) = if let Some(sc) = config.services.get(self.config_key())
-        {
-            (sc.warning, sc.critical, sc.disks.clone()) // Pulls the card names list array
-        } else {
-            // Default fallback if service configuration entry is completely missing
-            let default_card = if cfg!(target_os = "macos") {
-                "en0"
+        // Create an internal persistent state tracker for network interfaces
+        static NETWORKS: Mutex<Option<Networks>> = Mutex::new(None);
+        static HISTORY: Mutex<Option<HashMap<String, NetworkHistory>>> = Mutex::new(None);
+
+        let mut networks_guard = NETWORKS.lock().unwrap();
+        let mut history_guard = HISTORY.lock().unwrap();
+
+        let networks = networks_guard.get_or_insert_with(Networks::new_with_refreshed_list);
+        let history = history_guard.get_or_insert_with(HashMap::new);
+
+        // Refresh all interface metrics (sysinfo 0.39+ requires true argument)
+        networks.refresh(true);
+
+        // Fallback default network card filter if omitted in YAML
+        let default_interfaces = vec!["en0".to_string()];
+
+        // Resolve warning/critical thresholds (in Mbps) and target interfaces from YAML
+        let (warn, crit, target_interfaces) =
+            if let Some(sc) = config.services.get(self.config_key()) {
+                (
+                    sc.warning,
+                    sc.critical,
+                    sc.interfaces.as_ref().unwrap_or(&default_interfaces),
+                )
             } else {
-                "eth0"
+                (600.0, 900.0, &default_interfaces)
             };
-            (100.0, 500.0, Some(vec![default_card.to_string()]))
-        };
 
-        // Unwraps the vector list containing declared network card labels
-        let target_interfaces = raw_interfaces.unwrap_or_else(Vec::new);
-        if target_interfaces.is_empty() {
-            return None;
-        }
-
-        let current_stats = self.sample_network_bytes()?;
         let current_time = Instant::now();
+        let mut results = HashMap::new();
 
-        let mut guard = self.last_sample.lock().await;
-        let mut metrics = HashMap::new();
+        // Iterate through each interface requested in the YAML configuration
+        for target_interface in target_interfaces {
+            let mut found = false;
 
-        if let Some(prev) = guard.as_ref() {
-            let duration_secs = current_time.duration_since(prev.timestamp).as_secs_f64();
+            for (interface_name, data) in networks.iter() {
+                if interface_name == target_interface {
+                    found = true;
 
-            if duration_secs > 0.0 {
-                // Loop exclusively through your explicitly configured network card labels
-                for iface in &target_interfaces {
-                    if let (Some(&(curr_rx, curr_tx)), Some(&(prev_rx, prev_tx))) =
-                        (current_stats.get(iface), prev.stats.get(iface))
-                    {
-                        let delta_rx = curr_rx.saturating_sub(prev_rx);
-                        let delta_tx = curr_tx.saturating_sub(prev_tx);
+                    let current_rx_bytes = data.total_received();
+                    let current_tx_bytes = data.total_transmitted();
 
-                        // Convert total payload delta into Megabits per second
-                        let rx_mbps = (delta_rx as f64 * 8.0) / (duration_secs * 1_000_000.0);
-                        let tx_mbps = (delta_tx as f64 * 8.0) / (duration_secs * 1_000_000.0);
-                        let total_mbps = rx_mbps + tx_mbps;
+                    // Check if we have historical data for this interface
+                    if let Some(prev) = history.get(interface_name) {
+                        let elapsed_secs = current_time
+                            .duration_since(prev.last_check_time)
+                            .as_secs_f64();
 
-                        let status = if total_mbps >= crit {
-                            "CRITICAL".to_string()
-                        } else if total_mbps >= warn {
-                            "WARNING".to_string()
-                        } else {
-                            "OK".to_string()
-                        };
+                        if elapsed_secs > 0.0 {
+                            // Calculate byte differences since last check
+                            let rx_bytes_diff =
+                                current_rx_bytes.saturating_sub(prev.last_rx_bytes) as f64;
+                            let tx_bytes_diff =
+                                current_tx_bytes.saturating_sub(prev.last_tx_bytes) as f64;
 
-                        metrics.insert(
-                            iface.to_string(),
-                            (
-                                status,
-                                format!(
-                                    "Throughput: {:.2} Mbps (RX: {:.2} Mbps, TX: {:.2} Mbps)",
-                                    total_mbps, rx_mbps, tx_mbps
+                            // Convert Bytes/sec to Megabits/sec (1 Byte = 8 bits, 1 Megabit = 1,000,000 bits)
+                            let rx_mbps = (rx_bytes_diff * 8.0) / (elapsed_secs * 1_000_000.0);
+                            let tx_mbps = (tx_bytes_diff * 8.0) / (elapsed_secs * 1_000_000.0);
+                            let total_mbps = rx_mbps + tx_mbps;
+
+                            // Evaluate throughput against warning and critical rules
+                            let mut status = "OK".to_string();
+                            if total_mbps >= crit {
+                                status = "CRITICAL".to_string();
+                            } else if total_mbps >= warn {
+                                status = "WARNING".to_string();
+                            }
+
+                            results.insert(
+                                target_interface.clone(),
+                                (
+                                    status,
+                                    format!(
+                                        "Total: {:.2} Mbps (RX: {:.2} Mbps, TX: {:.2} Mbps)",
+                                        total_mbps, rx_mbps, tx_mbps
+                                    ),
                                 ),
-                            ),
-                        );
+                            );
+                        }
                     } else {
-                        metrics.insert(
-                            iface.to_string(),
+                        // First execution cycle: store baseline data, report initialization
+                        results.insert(
+                            target_interface.clone(),
                             (
-                                "UNKNOWN".to_string(),
-                                format!(
-                                    "Network card '{}'
-not found on system",
-                                    iface
-                                ),
+                                "OK".to_string(),
+                                "Initializing baseline counters... Throughput will calculate on next loop.".to_string(),
                             ),
                         );
                     }
+
+                    // Update historical state for next cycle
+                    history.insert(
+                        interface_name.clone(),
+                        NetworkHistory {
+                            last_rx_bytes: current_rx_bytes,
+                            last_tx_bytes: current_tx_bytes,
+                            last_check_time: current_time,
+                        },
+                    );
+
+                    break;
                 }
             }
-        } else {
-            // Populate metric initialization messages for declared cards on the first frame
-            for iface in &target_interfaces {
-                metrics.insert(
-                    iface.to_string(),
+
+            // Interface missing on host system
+            if !found {
+                results.insert(
+                    target_interface.clone(),
                     (
-                        "OK".to_string(),
-                        format!("Initializing baseline statistics for card '{}'", iface),
+                        "ERROR".to_string(),
+                        format!("Interface {} not found", target_interface),
                     ),
                 );
             }
         }
 
-        *guard = Some(NetSample {
-            timestamp: current_time,
-            stats: current_stats,
-        });
-
-        if metrics.is_empty() {
+        if results.is_empty() {
             None
         } else {
-            Some(CheckResult::Multi(metrics))
+            Some(CheckResult::Multi(results))
         }
     }
 }
