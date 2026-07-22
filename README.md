@@ -298,6 +298,7 @@ smith-rs/
 │       ├── mod.rs      # Traits and outcome enumeration definitions
 │       ├── load.rs     # System load average tracking
 │       ├── memory.rs   # RAM statistics monitor
+│       ├── swap.rs     # Swap statistics monitor
 │       ├── disk.rs     # Mount point disk space metrics
 │       └── ntp.rs      # Network time synchronization checking
 
@@ -308,5 +309,6 @@ smith-rs/
 ## License
 
 This project is open-source software distributed under the terms of the 
-**Apache License, Version 2.0**. See the `LICENSE` file for full terms and conditions.
+**Apache License, Version 2.0**. 
+See the `LICENSE` file for full terms and conditions.
 
