@@ -300,6 +300,7 @@ smith-rs/
 │       ├── memory.rs   # RAM statistics monitor
 │       ├── swap.rs     # Swap statistics monitor
 │       ├── disk.rs     # Mount point disk space metrics
+│       ├── network.rs  # Network traffic metrics 
 │       └── ntp.rs      # Network time synchronization checking
 
 ```
