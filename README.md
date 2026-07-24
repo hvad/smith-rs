@@ -214,7 +214,7 @@ services:
     description: "Network Throughput"
     warning: 600.0    # Combined RX/TX rate limit warning at 600 Mbps
     critical: 900.0   # Combined RX/TX rate limit critical at 900 Mbps
-    disks: ["eth0"] # Reuses array configuration for card names
+    interfaces: ["eth0"] # Use array configuration for card names
 
   # NETWORK HARDWARE ERROR/DROP PACKETS DISCARD RATE
   - name: "network_errors"
@@ -222,7 +222,7 @@ services:
     description: "Network Errors"
     warning: 0.05   # Warn if packet drop burst rate climbs over 0.05 drops/sec
     critical: 1.0   # Critical state if dropping >= 1 frame every single second
-    disks: ["en0"]
+    interfaces: ["eth0"] # Use array configuration for card names
 
   # CORE NETWORK SOCK STATS (PORT EXHAUSTION DEFENSE)
   - name: "tcp_states"
@@ -298,6 +298,7 @@ smith-rs/
 │       ├── mod.rs      # Traits and outcome enumeration definitions
 │       ├── load.rs     # System load average tracking
 │       ├── memory.rs   # RAM statistics monitor
+│       ├── swap.rs     # Swap statistics monitor
 │       ├── disk.rs     # Mount point disk space metrics
 │       └── ntp.rs      # Network time synchronization checking
 
@@ -308,5 +309,6 @@ smith-rs/
 ## License
 
 This project is open-source software distributed under the terms of the 
-**Apache License, Version 2.0**. See the `LICENSE` file for full terms and conditions.
+**Apache License, Version 2.0**. 
+See the `LICENSE` file for full terms and conditions.
 
