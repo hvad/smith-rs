@@ -16,3 +16,10 @@ async-trait = "0.1"
 daemonize = "0.5"
 libc = "0.2"
 nix = { version = "0.31.3", features = ["fs"] }
+
+[profile.release]
+opt-level = "z"     # Optimize for binary size
+lto = true          # Link-Time Optimization to prune unused code
+codegen-units = 1   # Better overall optimizations at the expense of build time
+panic = "abort"     # Disables call stack unwinding on panic
+strip = true        # Automatically removes debug symbols
