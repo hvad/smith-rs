@@ -1,25 +1,48 @@
 [package]
 name = "smith-rs"
 version = "0.2.0"
-edition = "2024"
+edition = "2021" # Rust 2021 edition (standard stable)
 authors = ["David Hannequin <david.hannequin@gmail.com>"]
+description = "A lightweight system monitoring daemon written in Rust"
 
 [dependencies]
+# Tokio async runtime for concurrent task execution
 tokio = { version = "1.35", features = ["full"] }
+
+# Command line argument parser using derive macros
+clap = { version = "4.4", features = ["derive"] }
+
+# System metrics collection library
 sysinfo = "0.39.6"
+
+# Date and time formatting
 chrono = "0.4"
+
+# Serialization / Deserialization framework
 serde = { version = "1.0", features = ["derive"] }
-serde_yaml = "0.9"
+# Maintained fork replacing the deprecated serde_yaml crate
+serde_yml = "0.0.13"
+
+# Asynchronous email dispatching via Rustls (no OpenSSL dependency)
 lettre = { version = "0.11", default-features = false, features = ["tokio1-rustls-tls", "smtp-transport", "builder", "tokio1"] }
+
+# Network Time Protocol (NTP) client
 rsntp = "4.0"
+
+# Allows async methods in trait definitions
 async-trait = "0.1"
+
+# Unix daemonization helper
 daemonize = "0.5"
+
+# Raw POSIX / libc system bindings
 libc = "0.2"
 nix = { version = "0.31.3", features = ["fs"] }
 
+# Release optimizations for small binary size and performance
 [profile.release]
 opt-level = "z"     # Optimize for binary size
-lto = true          # Link-Time Optimization to prune unused code
-codegen-units = 1   # Better overall optimizations at the expense of build time
-panic = "abort"     # Disables call stack unwinding on panic
-strip = true        # Automatically removes debug symbols
+lto = true          # Enable Link-Time Optimization
+codegen-units = 1   # Maximize optimization at compile time
+panic = "abort"     # Remove unwinding overhead on panic
+strip = true        # Strip debug symbols automatically

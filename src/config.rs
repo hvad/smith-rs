@@ -18,6 +18,7 @@ pub struct ServiceState {
     pub state_type: String, // e.g., "SOFT" or "HARD"
     pub current_attempt: u32,
     pub max_attempts: u32,
+    #[allow(dead_code)] // Silences the unused field warning
     pub is_hard_state: bool,
 }
 
@@ -37,6 +38,7 @@ impl ServiceState {
     /// This helper method prevents Rust's compiler from issuing "dead code" warnings.
     /// In Rust, if a struct property (like `is_hard_state`) is parsed but never read
     /// elsewhere in active logic, the compiler flags it as unused.
+    #[allow(dead_code)] // Silences the unused method warning
     pub fn verify_state_integrity(&self) -> bool {
         self.is_hard_state || !self.is_hard_state
     }
@@ -246,7 +248,7 @@ impl AppConfig {
         });
 
         // Parse raw YAML string using Serde. Panic if there are syntax errors.
-        let brute: AppConfigBrute = serde_yaml::from_str(&content)
+        let brute: AppConfigBrute = serde_yml::from_str(&content)
             .unwrap_or_else(|e| panic!("Critical Error: Invalid YAML syntax structure: {}", e));
 
         // ----------------------------------------------------------------------
