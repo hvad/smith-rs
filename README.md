@@ -265,7 +265,34 @@ and fires a recovery (r) notification.
 
 ## Usage
 
-You can launch the binary immediately from the console. 
+### 1. Zero-Configuration Mode (Default)
+
+smith-rs can run directly without supplying any configuration file or when the default configuration file is not found.
+
+In this mode, the agent automatically starts with:
+
+Active Checks:
+
+- System Load Average (load — interval: 10s, warn: 16.0, crit: 24.0)
+- Memory Usage (memory — interval: 15s, warn: 85%, crit: 95%)
+- Root Disk Space (disk on / — interval: 60s, warn: 90%, crit: 95%)
+
+**Alerting Disabled** (empty contact roster; metrics and state transitions are only printed to stdout/logs without sending emails).
+
+Logs & PID: Written to smith-rs.log and smith-rs.pid in the working directory.
+
+```bash
+# Run directly with built-in default metrics (no config file needed)
+./smith-rs
+
+# Run detached as a background daemon in default mode
+./smith-rs -d
+
+```
+
+### 2. Custom Configuration File
+
+To monitor additional services (Swap, Inodes, IOPS, Network, NTP), define custom thresholds, or enable email alerts, specify a YAML configuration file:
 
 ```bash
 # Run with a custom configuration path
