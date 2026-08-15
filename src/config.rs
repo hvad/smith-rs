@@ -1,9 +1,10 @@
 // Serde (Serializer/Deserializer) is the standard library for parsing data in Rust.
-// 'Deserialize' is a Rust macro (derived trait) that automatically generates code
+// 'Deserialize' is a Rust derive macro that automatically generates code
 // to convert structured text (like YAML or JSON) into our custom Rust structs.
 use serde::Deserialize;
 use std::collections::HashMap; // A standard key-value map implementation
 use std::fs; // Standard filesystem library for reading/writing files
+use std::path::Path; // Standard library utility to inspect and manipulate filesystem paths
 
 // ==========================================
 // 1. UTILITY FUNCTIONS AND STRUCTS
@@ -18,7 +19,7 @@ pub struct ServiceState {
     pub state_type: String, // e.g., "SOFT" or "HARD"
     pub current_attempt: u32,
     pub max_attempts: u32,
-    #[allow(dead_code)] // Silences the unused field warning
+    #[allow(dead_code)] // Silences the unused field compiler warning
     pub is_hard_state: bool,
 }
 
@@ -198,7 +199,7 @@ pub struct ServiceConfig {
 }
 
 /// The final parsed config tree containing mapped structures instead of flat vectors.
-/// Lookups are now highly optimized ($O(1)$ complexity) using hash maps.
+/// Lookups are now highly optimized (O(1) complexity) using hash maps.
 #[derive(Debug, Clone)]
 pub struct AppConfig {
     pub setting: RawSettingConfig,
@@ -207,6 +208,122 @@ pub struct AppConfig {
     pub timeperiods: HashMap<String, TimePeriodConfig>,
     pub contacts: HashMap<String, ContactConfig>,
     pub services: HashMap<String, ServiceConfig>,
+}
+
+// ==========================================
+// 4. DEFAULT TRAIT IMPLEMENTATION
+// ==========================================
+// In Rust, implementing the standard `Default` trait provides a canonical fallback
+// when no user configuration is supplied.
+impl Default for AppConfig {
+    fn default() -> Self {
+        // 1. Basic fallback settings (writing logs to smith-rs.log in local folder)
+        let setting = RawSettingConfig {
+            log_file_path: "smith-rs.log".to_string(),
+            pid_file_path: "smith-rs.pid".to_string(),
+            debug: false,
+        };
+
+        // 2. Fallback hostname using local machine identifier
+        let system = RawSystemConfig {
+            hostname: "localhost".to_string(),
+        };
+
+        // 3. Dummy email configuration (alerts are disabled via empty contacts list)
+        let email = RawEmailConfig {
+            smtp_server: "localhost".to_string(),
+            smtp_port: 25,
+            sender_email: "smith@localhost".to_string(),
+            smtp_username: None,
+            smtp_password: None,
+        };
+
+        // 4. Standard 24x7 schedule enabled by default
+        let mut timeperiods = HashMap::new();
+        timeperiods.insert(
+            "24x7".to_string(),
+            TimePeriodConfig {
+                name: "24x7".to_string(),
+                alias: "Default Always-On 24x7 Frame".to_string(),
+                sunday: "00:00-24:00".to_string(),
+                monday: "00:00-24:00".to_string(),
+                tuesday: "00:00-24:00".to_string(),
+                wednesday: "00:00-24:00".to_string(),
+                thursday: "00:00-24:00".to_string(),
+                friday: "00:00-24:00".to_string(),
+                saturday: "00:00-24:00".to_string(),
+            },
+        );
+
+        // 5. No contacts registered => NO ALERTS will be dispatched!
+        let contacts = HashMap::new();
+
+        // 6. Only activate the three requested indicators: Load, Memory, and Disk (root '/')
+        let mut services = HashMap::new();
+
+        // System Load Average check
+        services.insert(
+            "load".to_string(),
+            ServiceConfig {
+                name: "load".to_string(),
+                description: "Load Average".to_string(),
+                active: true,
+                check_interval: 10,
+                check_attempts: 3,
+                check_time_period: "24x7".to_string(),
+                warning: 16.0,
+                critical: 24.0,
+                disks: None,
+                interfaces: None,
+                ntp_pool_server: None,
+            },
+        );
+
+        // Memory (RAM) Usage check
+        services.insert(
+            "memory".to_string(),
+            ServiceConfig {
+                name: "memory".to_string(),
+                description: "Memory Usage".to_string(),
+                active: true,
+                check_interval: 15,
+                check_attempts: 3,
+                check_time_period: "24x7".to_string(),
+                warning: 85.0,
+                critical: 95.0,
+                disks: None,
+                interfaces: None,
+                ntp_pool_server: None,
+            },
+        );
+
+        // Disk space check specifically targeting root "/"
+        services.insert(
+            "disk".to_string(),
+            ServiceConfig {
+                name: "disk".to_string(),
+                description: "Disk Space".to_string(),
+                active: true,
+                check_interval: 60,
+                check_attempts: 3,
+                check_time_period: "24x7".to_string(),
+                warning: 90.0,
+                critical: 95.0,
+                disks: Some(vec!["/".to_string()]),
+                interfaces: None,
+                ntp_pool_server: None,
+            },
+        );
+
+        AppConfig {
+            setting,
+            system,
+            email,
+            timeperiods,
+            contacts,
+            services,
+        }
+    }
 }
 
 impl AppConfig {
@@ -233,10 +350,37 @@ impl AppConfig {
 }
 
 // ==========================================
-// 4. PARSING & INHERITANCE RESOLUTION ENGINE
+// 5. PARSING & INHERITANCE RESOLUTION ENGINE
 // ==========================================
 
 impl AppConfig {
+    /// Helper to load a configuration file if it exists, or seamlessly fall back to Default.
+    /// In Rust, `Option<&str>` allows passing either `Some("path/to/file.yaml")` or `None`.
+    pub fn load_or_default(optional_path: Option<&str>) -> Self {
+        match optional_path {
+            Some(path) => {
+                let path_obj = Path::new(path);
+                // Check if the configuration file physically exists on the disk
+                if path_obj.exists() {
+                    println!("Loading configuration from '{}'...", path);
+                    Self::load(path)
+                } else {
+                    println!(
+                        "Configuration file '{}' not found. Starting with default metrics (Load, Memory, Disk /) without alerts.",
+                        path
+                    );
+                    Self::default()
+                }
+            }
+            None => {
+                println!(
+                    "No configuration file specified. Starting with default metrics (Load, Memory, Disk /) without alerts."
+                );
+                Self::default()
+            }
+        }
+    }
+
     /// Loads a YAML file, parses it, resolves templates inheritance, and builds the AppConfig struct.
     pub fn load(path: &str) -> Self {
         // Read the file contents as a UTF-8 string. Panic if the file is missing or unreadable.

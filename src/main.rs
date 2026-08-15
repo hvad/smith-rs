@@ -32,9 +32,10 @@ use crate::engine::SmithEngine;
     long_about = None
 )]
 struct Args {
-    /// Path to the YAML configuration file
-    #[arg(short, long, default_value = "config.yaml")]
-    config: String,
+    /// Optional path to the YAML configuration file.
+    /// If not provided or file is missing, default checks (Load, Memory, Disk /) are used.
+    #[arg(short, long)]
+    config: Option<String>,
 
     /// Detach process and run as a background daemon
     #[arg(short, long, default_value_t = false)]
@@ -51,8 +52,9 @@ fn main() {
     // ------------------------------------------------------------------------
     // 2. CONFIGURATION LOADING
     // ------------------------------------------------------------------------
-    // Read and parse the YAML config file into our strongly-typed Rust struct.
-    let config = AppConfig::load(&args.config);
+    // Check if the user specified a configuration file or if default fallback is required.
+    // If the file does not exist, `AppConfig::load_or_default` returns our safe Default struct.
+    let config = AppConfig::load_or_default(args.config.as_deref());
 
     if config.setting.debug {
         println!(
@@ -116,7 +118,9 @@ fn main() {
         // Instantiate the engine with our application configuration
         let mut agent = SmithEngine::new(config);
 
-        // Register all active metric check modules
+        // Register all available metric check modules.
+        // The engine will only actually run checks that are marked 'active: true' in the configuration.
+        // In default mode, only Load, Memory, and Disk space are registered in `config.services`.
         agent.add_check(LoadAverageCheck);
         agent.add_check(MemoryUsageCheck::new());
         agent.add_check(SwapUsageCheck);
